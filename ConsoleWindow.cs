@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -15,17 +14,11 @@ internal static class ConsoleWindow
     private static readonly IntPtr IconSmall = 0;
     private static readonly IntPtr IconBig = 1;
 
-    /// <summary>Product version from &lt;Version&gt; in Wolves.csproj (e.g. "1.1.0").</summary>
-    public static string Version { get; } =
-        typeof(ConsoleWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-        ?? typeof(ConsoleWindow).Assembly.GetName().Version?.ToString(3)
-        ?? "?";
-
     public static void Apply()
     {
         try
         {
-            Console.Title = $"Wolves v{Version}";
+            Console.Title = $"{AppInfo.Name} v{AppInfo.Version}";
         }
         catch (IOException) { /* no console attached */ }
 

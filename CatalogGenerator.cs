@@ -111,7 +111,8 @@ public static class CatalogGenerator
 
     // ----------------------------------------------------------------------------- market files
 
-    public const string MarketProvider = "Wolves";
+    // Written to the "provider" field, e.g. "Wolves (1.1.0)"
+    public static readonly string MarketProvider = $"{AppInfo.Name} ({AppInfo.Version})";
     private const string MarketFullFileType = "Market File (Full)";
     private const string MarketDlcFileType = "Market File (DLC)";
     private const int MarketTimestampJitter = 512;   // lastUpdateAt = now - rand(0..512)
@@ -196,6 +197,13 @@ public static class CatalogGenerator
 
     public static async Task WriteItemsListAsync(string path) =>
         await File.WriteAllTextAsync(path, ToJson(BuildItemsList()));
+
+    /// <summary>
+    /// <c>CharactersList.json</c>: a plain array of character ids
+    /// (same shape as <c>Catalog_CharactersList()</c> in the PHP API).
+    /// </summary>
+    public static async Task WriteCharactersListAsync(string path) =>
+        await File.WriteAllTextAsync(path, ToJson(CharacterIdsInOrder()));
 
     /// <summary>
     /// Reads a JSON string array of customization ids (e.g. <c>Defaults/DefaultCustomizationItems.json</c>).

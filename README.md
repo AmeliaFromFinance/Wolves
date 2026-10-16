@@ -46,6 +46,7 @@ All files are written to the `Extracted` folder.
 | `Characters.json` | Every survivor and killer, with names, roles and DLC info |
 | `Perks.json` · `Items.json` · `Addons.json` · `Offerings.json` | Everything a character can equip |
 | `ItemsList.json` | A short list of all perk, item, add-on and offering ids |
+| `CharactersList.json` | A short list of all character ids |
 | `Bloodweb.json` | A fully completed bloodweb with every item in the inventory |
 | `GetAll.json` | The same full inventory for every character at once |
 | `MarketFull.json` | Every cosmetic from the store catalog |
@@ -94,7 +95,7 @@ Publish with the `FolderProfile` profile (`win-x64`).
 1. Asks for a `.usmap` file and copies it to `Extracted\mappings.usmap`.
 2. Locates the game: command-line argument → saved path → Steam → Epic Games → folder picker.
 3. Mounts the game archives with CUE4Parse and reads `ItemDB`, `ItemAddonDB`, `OfferingDB`, `PerkDB` and `CharacterDescriptionDB`.
-4. Generates `Bloodweb.json`, `GetAll.json` and `ItemsList.json`.
+4. Generates `Bloodweb.json`, `GetAll.json`, `ItemsList.json` and `CharactersList.json`.
 5. Generates `MarketFull.json` and `MarketDLC.json` from `Defaults\`.
 
 ### Project layout
@@ -118,7 +119,7 @@ Publish with the `FolderProfile` profile (`win-x64`).
 | `Models.cs` | `AesKey` | Dead by Daylight AES key |
 | `CatalogGenerator.cs` | Perk / item / add-on / offering quantities | `3` / `50` / `50` / `50` |
 | `CatalogGenerator.cs` | Bloodweb level, prestige | `30`, `0` |
-| `CatalogGenerator.cs` | `MarketProvider` (the `provider` field of the market files) | `Wolves` |
+| `CatalogGenerator.cs` | `MarketProvider` (the `provider` field of the market files) | `Wolves (<version>)` |
 
 > [!NOTE]
 > `Defaults\Catalog.decrypted.json` is a snapshot of the store catalog. Replace it with a newer one
@@ -158,7 +159,7 @@ Publish with the `FolderProfile` profile (`win-x64`).
 {
   "fileType": "Market File (Full)",
   "creationDate": "16.10.2026 09:54",
-  "provider": "Wolves",
+  "provider": "Wolves (1.1.0)",
   "inventoryItems": [ { "lastUpdateAt": 1760541000, "objectId": "D_Head01", "quantity": 1 } ]
 }
 ```
@@ -175,6 +176,14 @@ Ids containing any word from `MarketExcludedSubstrings` (by default `Bundle`) ar
   "addons": [ "..." ],
   "offerings": [ "..." ]
 }
+```
+</details>
+
+<details>
+<summary><code>CharactersList.json</code></summary>
+
+```json
+[ "Dwight", "Meg", "Claudette", "Jake", "Chuckles", "Bear" ]
 ```
 </details>
 
