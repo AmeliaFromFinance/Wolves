@@ -11,7 +11,7 @@
     <ApplicationIcon>Assets\Wolves.ico</ApplicationIcon>
 
     <!-- Single source of truth: AssemblyVersion, FileVersion and the "Product version" shown by Explorer derive from it -->
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <!-- Without this the product version becomes "1.1.0+<git commit hash>" -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <NeutralLanguage>en</NeutralLanguage>

@@ -20,7 +20,7 @@ internal class Program
     private static async Task<int> Main(string[] args)
     {
         ConsoleWindow.Apply();
-        Console.WriteLine($"Wolves v{ConsoleWindow.Version}");
+        Console.WriteLine($"{AppInfo.Name} v{AppInfo.Version}");
         Console.WriteLine();
 
         // CUE4Parse reports mount/decompression problems only through Serilog; without a logger they are silently dropped
@@ -103,15 +103,17 @@ internal class Program
         await WriteJsonAsync(Path.Combine(FinalOutputFolder, "Characters.json"), Classes.Ids.CharacterIds);
         Console.WriteLine($"      Saved data to: {FinalOutputFolder}");
 
-        // Step 4: Generate Bloodweb.json, GetAll.json and ItemsList.json from the extracted data
-        Console.WriteLine("[4/5] Generating Bloodweb.json, GetAll.json and ItemsList.json...");
+        // Step 4: Generate Bloodweb.json, GetAll.json, ItemsList.json and CharactersList.json from the extracted data
+        Console.WriteLine("[4/5] Generating Bloodweb.json, GetAll.json, ItemsList.json and CharactersList.json...");
         await CatalogGenerator.WriteBloodWebAsync(Path.Combine(FinalOutputFolder, "Bloodweb.json"));
         await CatalogGenerator.WriteGetAllAsync(Path.Combine(FinalOutputFolder, "GetAll.json"));
         await CatalogGenerator.WriteItemsListAsync(Path.Combine(FinalOutputFolder, "ItemsList.json"));
+        await CatalogGenerator.WriteCharactersListAsync(Path.Combine(FinalOutputFolder, "CharactersList.json"));
 
         Console.WriteLine($"      Bloodweb.json: {CatalogGenerator.BuildCharacterItems().Count} inventory entries");
         Console.WriteLine($"      GetAll.json:   {Classes.Ids.CharacterIds.Count} characters");
         Console.WriteLine($"      ItemsList.json: {Classes.Ids.PerkIds.Count} perks, {Classes.Ids.ItemIds.Count} items, {Classes.Ids.ItemAddonIds.Count} addons, {Classes.Ids.OfferingIds.Count} offerings");
+        Console.WriteLine($"      CharactersList.json: {CatalogGenerator.CharacterIdsInOrder().Count} characters");
 
         // Step 5: Generate the market files from the default customization items + bundled decrypted catalog
         Console.WriteLine("[5/5] Generating MarketFull.json and MarketDLC.json...");
