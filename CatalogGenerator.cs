@@ -111,11 +111,21 @@ public static class CatalogGenerator
 
     // ----------------------------------------------------------------------------- market files
 
-    public const string MarketProvider = "Cursed Market API";
+    public const string MarketProvider = "Wolves";
     private const string MarketFullFileType = "Market File (Full)";
     private const string MarketDlcFileType = "Market File (DLC)";
     private const int MarketTimestampJitter = 512;   // lastUpdateAt = now - rand(0..512)
-    private const string MarketExcludedSubstring = "Bundle";   // objectIds containing this are never added
+    // objectIds containing any of these (case-insensitive) are never added to the market files
+    private static readonly string[] MarketExcludedSubstrings =
+    [
+        "Bundle",
+        "NewPlayer",
+        "ChapterPack",
+        "Autumn_Fashion",
+        "Gameplay_Expo",
+        "St_Patricks_2026",
+        "DeckTheTrials2025"
+    ];
 
     /// <summary>
     /// <c>MarketFull.json</c>: every default customization item plus every entry of the (decrypted)
@@ -142,16 +152,18 @@ public static class CatalogGenerator
     }
 
     /// <summary>
-    /// <c>MarketDLC.json</c>: only the default customization items.
+    /// <c>MarketDLC.json</c>: the default customization items plus every character
+    /// (by <see cref="Classes.Character.CharacterId"/>), which unlocks the DLC characters.
     /// </summary>
     public static MarketFile BuildMarketDlc(IEnumerable<string> defaultCustomizationIds)
     {
         var market = NewMarketFile(MarketDlcFileType);
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var added = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (string id in defaultCustomizationIds)
+        foreach (string id in defaultCustomizationIds.Concat(CharacterIdsInOrder()))
         {
-            if (IsExcludedFromMarket(id))
+            if (IsExcludedFromMarket(id) || !added.Add(id))
                 continue;
 
             market.InventoryItems.Add(NewInventoryItem(now, id));
@@ -159,6 +171,31 @@ public static class CatalogGenerator
 
         return market;
     }
+
+    /// <summary>Backend ids of all extracted characters, ordered by character index.</summary>
+    public static List<string> CharacterIdsInOrder() =>
+        OrderedCharacters()
+            .Select(kvp => kvp.Value.CharacterId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    // ----------------------------------------------------------------------------- items list
+
+    /// <summary>
+    /// <c>ItemsList.json</c>: the ids of every perk, item, add-on and offering
+    /// (same shape as <c>Catalog_ItemsList()</c> in the PHP API).
+    /// </summary>
+    public static ItemsListFile BuildItemsList() => new()
+    {
+        Perks = Classes.Ids.PerkIds.Keys.ToList(),
+        Items = Classes.Ids.ItemIds.Keys.ToList(),
+        Addons = Classes.Ids.ItemAddonIds.Keys.ToList(),
+        Offerings = Classes.Ids.OfferingIds.Keys.ToList()
+    };
+
+    public static async Task WriteItemsListAsync(string path) =>
+        await File.WriteAllTextAsync(path, ToJson(BuildItemsList()));
 
     /// <summary>
     /// Reads a JSON string array of customization ids (e.g. <c>Defaults/DefaultCustomizationItems.json</c>).
@@ -193,9 +230,9 @@ public static class CatalogGenerator
     public static async Task WriteMarketDlcAsync(string path, IEnumerable<string> defaultCustomizationIds) =>
         await File.WriteAllTextAsync(path, ToJson(BuildMarketDlc(defaultCustomizationIds)));
 
-    /// <summary>Bundles are never written to the market files.</summary>
+    /// <summary>Ids matching any <see cref="MarketExcludedSubstrings"/> entry are never written to the market files.</summary>
     private static bool IsExcludedFromMarket(string objectId) =>
-        objectId.Contains(MarketExcludedSubstring, StringComparison.OrdinalIgnoreCase);
+        MarketExcludedSubstrings.Any(word => objectId.Contains(word, StringComparison.OrdinalIgnoreCase));
 
     private static MarketFile NewMarketFile(string fileType) => new()
     {

@@ -1,53 +1,77 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Oodle (downloaded by CUE4Parse at runtime) is x64 only, so the app must run as a 64-bit process -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <ApplicationIcon>Assets\Wolves.ico</ApplicationIcon>
+
+    <!-- Single source of truth: AssemblyVersion, FileVersion and the "Product version" shown by Explorer derive from it -->
+    <Version>1.1.0</Version>
+    <!-- Without this the product version becomes "1.1.0+<git commit hash>" -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <NeutralLanguage>en</NeutralLanguage>
+
     <!-- The native file dialog is implemented with classic COM interop (ComImport); the
          analyzer suggestion to migrate to source-generated COM is intentionally silenced. -->
     <NoWarn>$(NoWarn);SYSLIB1096</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Blake3" Version="3.0.2" />
-    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <!-- CUE4Parse brings its own dependencies (Oodle.NET, Zlib-ng.NET, System.Numerics.Tensors, ...) -->
+    <PackageReference Include="CUE4Parse" Version="1.2.2.202610" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Costura.Fody" Version="6.2.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="DotNetZip" Version="1.16.0" />
-    <PackageReference Include="FixedMathSharp" Version="7.1.0" />
-    <PackageReference Include="Fmod5Sharp" Version="3.1.0" />
-    <PackageReference Include="GenericReader" Version="2.3.0" />
-    <PackageReference Include="Infrablack.UE4Config" Version="0.7.2.97" />
-    <PackageReference Include="K4os.Compression.LZ4.Streams" Version="1.3.8" />
-    <PackageReference Include="LZMA-SDK" Version="22.1.1" />
-    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.13" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="OffiUtils" Version="3.2.0" />
-    <PackageReference Include="Oodle.NET" Version="2.2.0" />
-    <PackageReference Include="OodleSharp" Version="0.0.1" />
-    <PackageReference Include="Serilog" Version="4.4.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
-    <PackageReference Include="SubstreamSharp" Version="1.0.3" />
-    <PackageReference Include="System.Drawing.Common" Version="10.0.13" />
-    <PackageReference Include="System.IO.Hashing" Version="10.0.13" />
-    <PackageReference Include="VGAudio" Version="2.2.1" />
-    <PackageReference Include="Zlib-ng.NET" Version="1.2.0" />
-    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Defaults\*.json (default customization items + decrypted catalog) are read from next to the exe at runtime -->
     <None Include="Defaults\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Drag-and-drop helper: ZLIB + Base64 encode/decode to clipboard; lands in Extracted\ next to the generated JSON (folder is created by the copy) -->
+    <None Include="ZLIB.py" Link="Extracted\ZLIB.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    Oodle: download the same build CUE4Parse uses and place oodle-data-shared.dll next to the exe on build and publish.
+    The archive is cached in obj\oodle, so it is downloaded once. If the download fails the build still succeeds
+    (with a warning) and CUE4Parse falls back to downloading the DLL at runtime.
+  -->
+  <PropertyGroup>
+    <OodleRelease>2026-06-04-1357</OodleRelease>
+    <OodleZipUrl>https://github.com/WorkingRobot/OodleUE/releases/download/$(OodleRelease)/clang-cl-x64-release.zip</OodleZipUrl>
+    <OodleCacheDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)oodle\$(OodleRelease)\</OodleCacheDir>
+    <OodleDllPath>$(OodleCacheDir)bin\oodle-data-shared.dll</OodleDllPath>
+  </PropertyGroup>
+
   <ItemGroup>
-    <Reference Include="CUE4Parse">
-      <HintPath>libs\CUE4Parse.dll</HintPath>
-    </Reference>
+    <None Include="$(OodleDllPath)" Link="oodle-data-shared.dll" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="DownloadOodle" BeforeTargets="AssignTargetPaths" Condition="!Exists('$(OodleDllPath)')">
+    <DownloadFile SourceUrl="$(OodleZipUrl)" DestinationFolder="$(OodleCacheDir)" DestinationFileName="oodle.zip" ContinueOnError="WarnAndContinue" />
+    <Unzip SourceFiles="$(OodleCacheDir)oodle.zip" DestinationFolder="$(OodleCacheDir)" Condition="Exists('$(OodleCacheDir)oodle.zip')" ContinueOnError="WarnAndContinue" />
+    <!-- Keep only the DLL; the archive also ships static libs, PDBs and tools -->
+    <ItemGroup>
+      <_OodleExtras Include="$(OodleCacheDir)**\*" Exclude="$(OodleDllPath)" />
+    </ItemGroup>
+    <Delete Files="@(_OodleExtras)" />
+    <Warning Text="oodle-data-shared.dll could not be downloaded; it will be fetched at runtime instead." Condition="!Exists('$(OodleDllPath)')" />
+  </Target>
+
+  <!-- A missing DLL must not break the copy step when the download failed -->
+  <Target Name="DropMissingOodle" AfterTargets="DownloadOodle" Condition="!Exists('$(OodleDllPath)')">
+    <ItemGroup>
+      <None Remove="$(OodleDllPath)" />
+    </ItemGroup>
+  </Target>
 
 </Project>
