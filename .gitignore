@@ -1,6 +1,23 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
+# Visual Studio local state (window layout, caches, .suo)
+.vs/
+*.user
+*.suo
 
-/.vs/Wolves.slnx/FileContentIndex
-/.vs/Wolves.slnx
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+
+# NuGet
+*.nupkg
+packages/
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
