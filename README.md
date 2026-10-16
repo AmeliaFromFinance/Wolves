@@ -1,124 +1,185 @@
-# Wolves Asset Extractor
+<p align="center">
+  <img src="Assets/Wolves.png" width="140" alt="Wolves logo">
+</p>
 
-Mounts a local Dead by Daylight installation with CUE4Parse, extracts the item / add-on /
-offering / perk / character databases, and generates `Bloodweb.json`, `GetAll.json`,
-`MarketFull.json` and `MarketDLC.json` in the same shape as the game's own responses.
+<h1 align="center">Wolves</h1>
 
-## Project layout
+<p align="center">
+  <b>Turns your Dead by Daylight installation into ready-to-use profile and market files.</b><br>
+  One click, no setup, no manual editing.
+</p>
 
-| File | Purpose |
+<p align="center">
+  <img src="https://img.shields.io/badge/Windows-x64-0078D6?logo=windows&logoColor=white" alt="Windows x64">
+  <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" alt=".NET 10">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license">
+</p>
+
+---
+
+## What it does
+
+Wolves reads the game files of your installed **Dead by Daylight** and builds a set of JSON files from them:
+every character, perk, item, add-on and offering that exists in your game version, plus complete
+bloodweb, inventory and market data in the same format the game itself uses.
+
+Because everything comes straight from your own game files, the result always matches your game version.
+When the game updates, just run Wolves again.
+
+## Quick start
+
+1. **Download** the latest release and unpack it anywhere.
+2. **Run** `Wolves.exe`.
+3. **Pick a mappings file** (`.usmap`) for your game version when asked.
+4. **Done.** Wolves finds the game by itself and writes everything to the `Extracted` folder next to the exe.
+
+> [!TIP]
+> Wolves finds Steam and Epic Games installs automatically. If your game lives somewhere else,
+> it asks you to point at the folder once and remembers it for next time.
+
+## What you get
+
+All files are written to the `Extracted` folder.
+
+| File | What's inside |
 | :--- | :--- |
-| `Program.cs` | Pipeline orchestration (the five steps below). |
-| `Cue4Parse.cs` | Mounting the paks and parsing the `*DB.uasset` DataTables into `Classes.Ids`. |
-| `Models.cs` | `Extras.Settings` (pak path, AES key, mappings path) and the `Classes.*` data model. |
-| `FileOpenDialog.cs` | Native Windows `IFileOpenDialog` wrapper used to pick the `.usmap` file (no WinForms/WPF dependency). |
-| `CatalogModels.cs` | Serialisation models for the generated JSON files. |
-| `CatalogGenerator.cs` | Builds `Bloodweb.json`, `GetAll.json`, `MarketFull.json` and `MarketDLC.json`. |
-| `Defaults/DefaultCustomizationItems.json` | JSON string array of default customization ids used by the market files. |
-| `Defaults/Catalog.decrypted.json` | Decrypted store catalog; its top-level `id`s are used by `MarketFull.json`. |
-
-## Configuration
-
-### `Program.cs`
-| Variable | Default Value | Description |
-| :--- | :--- | :--- |
-| `GameInstallDir` | `C:\Program Files (x86)\Steam\steamapps\common\Dead by Daylight` | Root installation directory of the game. `Paks` are resolved as `<GameInstallDir>\DeadByDaylight\Content\Paks`. |
-| `FinalOutputFolder` | `<exe folder>\Extracted` | Destination for `mappings.usmap`, the five extracted databases and all generated JSON files. |
-| `DefaultCustomizationItemsPath` | `<exe folder>\Defaults\DefaultCustomizationItems.json` | Default customization ids. Optional: a warning is printed and the lists are empty if missing. |
-| `DecryptedCatalogPath` | `<exe folder>\Defaults\Catalog.decrypted.json` | Decrypted catalog (JSON array of objects with an `id`). Required for step 5. |
-
-### `Models.cs`
-| Variable | Default Value | Description |
-| :--- | :--- | :--- |
-| `Extras.Settings.PakPath` | `<GameInstallDir>\DeadByDaylight\Content\Paks` | Explicit path to the game's `.pak` files (overwritten from `GameInstallDir` at runtime). |
-| `Extras.Settings.AesKey` | `0x22B1639B…39B3` | AES key used by CUE4Parse to decrypt the game's packages. |
-
-### `CatalogGenerator.cs`
-| Constant | Default Value | Description |
-| :--- | :--- | :--- |
-| `PerkQuantity` | `3` | Quantity written for every perk. |
-| `ItemQuantity` / `AddonQuantity` / `OfferingQuantity` | `50` | Quantity written for every item, add-on and offering. |
-| `BloodWebLevel` | `30` | `bloodWebLevel` written to `Bloodweb.json` and `GetAll.json`. |
-| `PrestigeLevel` / `LegacyPrestigeLevel` | `0` | Prestige values written to both files. |
-| `MarketProvider` | `Cursed Market API` | `provider` written to the market files. |
-
-## Execution flow
-
-1. **Select mappings:** A standard Windows *Open* dialog asks for a `*.usmap` file. The selected file is copied to `<FinalOutputFolder>\mappings.usmap` (the original is left untouched). Cancelling the dialog exits the program.
-2. **Mount game:** CUE4Parse mounts the game packages using the mappings from step 1.
-3. **Asset extraction:** `ItemDB`, `ItemAddonDB`, `OfferingDB`, `PerkDB` and `CharacterDescriptionDB` are parsed and written to `Items.json`, `Addons.json`, `Offerings.json`, `Perks.json` and `Characters.json`.
-4. **Generate catalog files:** `Bloodweb.json` and `GetAll.json` are generated from the extracted data.
-5. **Generate market files:** `MarketFull.json` and `MarketDLC.json` are generated from `Defaults\DefaultCustomizationItems.json` and `Defaults\Catalog.decrypted.json`.
-
-> [!NOTE]
-> `Defaults\Catalog.decrypted.json` is a snapshot of the store catalog. Replace it with a newer
-> decrypted catalog when the game updates; the program only reads each entry's top-level `id`.
-
-## Generated files
-
-### `Bloodweb.json`
-Single-character response (`characterName` is left empty, as it describes whichever character is
-currently selected). `bloodWebData` is pre-filled: node `0` collected, rings 1–3 fully collected
-(`Father_Key_Card`) and an available `EbonyMementoMori` on node `401`. `characterItems` contains
-**every** item, add-on, perk and offering from `Classes.Ids`, in that order, with the quantities above.
-
-```json
-{
-    "bloodWebLevelChanged": false,
-    "updatedWallets": [],
-    "characterName": "",
-    "bloodWebLevel": 30,
-    "prestigeLevel": 0,
-    "bloodWebData": { "paths": [ "0_101", … ], "ringData": [ { "nodeData": [ … ] }, … ] },
-    "characterItems": [ { "itemId": "Item_Camper_DullKey", "quantity": 50 }, …, { "itemId": "Bond", "quantity": 3 }, … ],
-    "legacyPrestigeLevel": 0
-}
-```
-
-### `GetAll.json`
-One entry per character in `Classes.Ids.CharacterIds`, ordered by character index. `characterName`
-and `origin.purchaseInfo.objectId` use the character's backend id (`Classes.Character.CharacterId`, read
-from the `CharacterId` field of `CharacterDescriptionDB`, e.g. `Dwight`, `Chuckles`, `Bear`). Every
-character receives the same full `characterItems` list.
-
-```json
-{
-    "list": [
-        {
-            "characterName": "Dwight",
-            "legacyPrestigeLevel": 0,
-            "characterItems": [ … ],
-            "bloodWebLevel": 30,
-            "bloodWebData": { "paths": [], "ringData": [] },
-            "isEntitled": true,
-            "isScopesValid": true,
-            "origin": {
-                "entitlements": [],
-                "purchaseInfo": { "lastUpdateAt": 1760536260, "objectId": "Dwight", "quantity": 1 }
-            },
-            "prestigeLevel": 0
-        }
-    ]
-}
-```
-
-### `MarketFull.json` / `MarketDLC.json`
-**Full** = every default customization item followed by every top-level `id` in the decrypted catalog,
-with entries whose id is a character id (`Classes.Character.CharacterId`) removed. **DLC** = only the
-default customization items. In both files any id containing `Bundle` (case-insensitive) is skipped.
-`lastUpdateAt` is `now - rand(0..512)` seconds and `creationDate` uses `dd.MM.yyyy HH:mm`.
-
-```json
-{
-    "fileType": "Market File (Full)",
-    "creationDate": "15.10.2026 16:12",
-    "provider": "Cursed Market API",
-    "inventoryItems": [ { "lastUpdateAt": 1760541000, "objectId": "D_Head01", "quantity": 1 }, … ]
-}
-```
+| `Characters.json` | Every survivor and killer, with names, roles and DLC info |
+| `Perks.json` · `Items.json` · `Addons.json` · `Offerings.json` | Everything a character can equip |
+| `ItemsList.json` | A short list of all perk, item, add-on and offering ids |
+| `Bloodweb.json` | A fully completed bloodweb with every item in the inventory |
+| `GetAll.json` | The same full inventory for every character at once |
+| `MarketFull.json` | Every cosmetic from the store catalog |
+| `MarketDLC.json` | Default cosmetics plus every character |
+| `ZLIB.py` | A small helper for packing and unpacking files ([see below](#zlibpy)) |
 
 ## Requirements
 
-* Windows (native file dialog, Oodle DLL).
-* .NET 10 SDK. A prebuilt `CUE4Parse.dll` ships in `libs\` (referenced via `HintPath` in `Wolves.csproj`).
-* A `.usmap` mappings file for the installed game build. 
+- Windows 10 or 11, **64-bit**
+- [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
+- A `.usmap` mappings file that matches your game version
+- Internet access on the first run (a small decompression library is downloaded once)
+
+## `ZLIB.py`
+
+A drag-and-drop helper that sits in the `Extracted` folder. Drop any file onto it:
+
+- **a regular file** gets compressed and encoded (ZLIB + Base64),
+- **an already encoded file** gets decoded back,
+
+and the result is copied straight to your clipboard. Needs [Python 3](https://www.python.org/downloads/).
+
+## Troubleshooting
+
+| Problem | Solution |
+| :--- | :--- |
+| The game is not found | Pick the game folder in the dialog, or drop the folder onto `Wolves.exe` |
+| Wrong game folder was remembered | Delete `Wolves.settings.json` next to the exe and run again |
+| "No archives could be mounted" | Read the warnings above the error. Usually the game was updated and Wolves needs a newer version |
+| Anything else | The full error is saved to `Wolves.error.log` next to the exe. Attach it when reporting an issue |
+
+---
+
+<details>
+<summary><b>For developers</b></summary>
+
+### Building
+
+Requires the **.NET 10 SDK**. Open `Wolves.slnx` in Visual Studio 2026 (or run `dotnet build`).
+NuGet restores everything, including [CUE4Parse](https://github.com/FabianFG/CUE4Parse), and the Oodle
+decompressor is downloaded and placed next to the exe during the build.
+Publish with the `FolderProfile` profile (`win-x64`).
+
+### How it works
+
+1. Asks for a `.usmap` file and copies it to `Extracted\mappings.usmap`.
+2. Locates the game: command-line argument → saved path → Steam → Epic Games → folder picker.
+3. Mounts the game archives with CUE4Parse and reads `ItemDB`, `ItemAddonDB`, `OfferingDB`, `PerkDB` and `CharacterDescriptionDB`.
+4. Generates `Bloodweb.json`, `GetAll.json` and `ItemsList.json`.
+5. Generates `MarketFull.json` and `MarketDLC.json` from `Defaults\`.
+
+### Project layout
+
+| File | Purpose |
+| :--- | :--- |
+| `Program.cs` | Runs the five steps above, error reporting |
+| `Cue4Parse.cs` | Mounting the game and reading the databases |
+| `GameLocator.cs` | Finding the game folder |
+| `CatalogGenerator.cs` · `CatalogModels.cs` | Building the generated JSON files |
+| `FileOpenDialog.cs` · `ConsoleWindow.cs` | Native Windows dialogs, console title and icon |
+| `Models.cs` | AES key and the extracted data model |
+| `Defaults\` | Default cosmetics and the decrypted store catalog used for the market files |
+
+### Settings
+
+| Where | Setting | Default |
+| :--- | :--- | :--- |
+| `Wolves.csproj` | `Version` | `1.1.0` |
+| `Wolves.csproj` | `CUE4Parse` package version, `OodleRelease` | Bump when the game updates |
+| `Models.cs` | `AesKey` | Dead by Daylight AES key |
+| `CatalogGenerator.cs` | Perk / item / add-on / offering quantities | `3` / `50` / `50` / `50` |
+| `CatalogGenerator.cs` | Bloodweb level, prestige | `30`, `0` |
+| `CatalogGenerator.cs` | `MarketProvider` (the `provider` field of the market files) | `Wolves` |
+
+> [!NOTE]
+> `Defaults\Catalog.decrypted.json` is a snapshot of the store catalog. Replace it with a newer one
+> when new cosmetics are released.
+
+### Output format
+
+<details>
+<summary><code>GetAll.json</code></summary>
+
+```json
+{
+  "list": [
+    {
+      "characterName": "Dwight",
+      "legacyPrestigeLevel": 0,
+      "characterItems": [ { "itemId": "Item_Camper_DullKey", "quantity": 50 } ],
+      "bloodWebLevel": 30,
+      "bloodWebData": { "paths": [], "ringData": [] },
+      "isEntitled": true,
+      "isScopesValid": true,
+      "origin": {
+        "entitlements": [],
+        "purchaseInfo": { "lastUpdateAt": 1760536260, "objectId": "Dwight", "quantity": 1 }
+      },
+      "prestigeLevel": 0
+    }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><code>MarketFull.json</code> / <code>MarketDLC.json</code></summary>
+
+```json
+{
+  "fileType": "Market File (Full)",
+  "creationDate": "16.10.2026 09:54",
+  "provider": "Wolves",
+  "inventoryItems": [ { "lastUpdateAt": 1760541000, "objectId": "D_Head01", "quantity": 1 } ]
+}
+```
+Ids containing any word from `MarketExcludedSubstrings` (by default `Bundle`) are always skipped. Characters are excluded from **Full** and included in **DLC**.
+</details>
+
+<details>
+<summary><code>ItemsList.json</code></summary>
+
+```json
+{
+  "perks": [ "Bond" ],
+  "items": [ "Item_Camper_DullKey" ],
+  "addons": [ "..." ],
+  "offerings": [ "..." ]
+}
+```
+</details>
+
+</details>
+
+## License
+
+[MIT](LICENSE)

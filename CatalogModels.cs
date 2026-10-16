@@ -175,3 +175,21 @@ public sealed class MarketFile
     [JsonProperty("inventoryItems")]
     public List<InventoryItem> InventoryItems { get; set; } = [];
 }
+
+/// <summary>
+/// Shape of <c>ItemsList.json</c>: plain id lists per category.
+/// </summary>
+public sealed class ItemsListFile
+{
+    [JsonProperty("perks")]
+    public List<string> Perks { get; set; } = [];
+
+    [JsonProperty("items")]
+    public List<string> Items { get; set; } = [];
+
+    [JsonProperty("addons")]
+    public List<string> Addons { get; set; } = [];
+
+    [JsonProperty("offerings")]
+    public List<string> Offerings { get; set; } = [];
+}

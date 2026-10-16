@@ -5,7 +5,7 @@ namespace Wolves;
 
 /// <summary>
 /// Thin wrapper around the Windows Common Item Dialog (<c>IFileOpenDialog</c>) so a console
-/// application can show the standard "Open" dialog without pulling in WinForms or WPF.
+/// application can show the standard "Open" / "Select folder" dialog without pulling in WinForms or WPF.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public static class FileOpenDialog
@@ -27,6 +27,19 @@ public static class FileOpenDialog
         string? defaultExtension = null,
         string? initialDirectory = null)
     {
+        return RunOnStaThread(() => ShowCore(title, filterName, filterSpec, defaultExtension, initialDirectory, pickFolders: false));
+    }
+
+    /// <summary>
+    /// Shows the dialog in folder-picking mode and returns the selected folder, or <c>null</c> if the user cancelled.
+    /// </summary>
+    public static string? ShowFolderDialog(string title, string? initialDirectory = null)
+    {
+        return RunOnStaThread(() => ShowCore(title, null, null, null, initialDirectory, pickFolders: true));
+    }
+
+    private static string? RunOnStaThread(Func<string?> show)
+    {
         string? result = null;
         Exception? error = null;
 
@@ -35,7 +48,7 @@ public static class FileOpenDialog
         {
             try
             {
-                result = ShowCore(title, filterName, filterSpec, defaultExtension, initialDirectory);
+                result = show();
             }
             catch (Exception ex)
             {
@@ -55,28 +68,34 @@ public static class FileOpenDialog
 
     private static string? ShowCore(
         string title,
-        string filterName,
-        string filterSpec,
+        string? filterName,
+        string? filterSpec,
         string? defaultExtension,
-        string? initialDirectory)
+        string? initialDirectory,
+        bool pickFolders)
     {
         var dialog = (IFileOpenDialog)new FileOpenDialogRCW();
         try
         {
             dialog.SetTitle(title);
 
-            var filters = new[]
+            // File type filters do not apply in folder-picking mode
+            if (!pickFolders && filterName is not null && filterSpec is not null)
             {
-                new COMDLG_FILTERSPEC { pszName = filterName, pszSpec = filterSpec }
-            };
-            dialog.SetFileTypes((uint)filters.Length, filters);
-            dialog.SetFileTypeIndex(1);
+                var filters = new[]
+                {
+                    new COMDLG_FILTERSPEC { pszName = filterName, pszSpec = filterSpec }
+                };
+                dialog.SetFileTypes((uint)filters.Length, filters);
+                dialog.SetFileTypeIndex(1);
+            }
 
             if (!string.IsNullOrEmpty(defaultExtension))
                 dialog.SetDefaultExtension(defaultExtension);
 
             dialog.GetOptions(out FOS options);
-            options |= FOS.FOS_FORCEFILESYSTEM | FOS.FOS_FILEMUSTEXIST | FOS.FOS_PATHMUSTEXIST | FOS.FOS_NOCHANGEDIR;
+            options |= FOS.FOS_FORCEFILESYSTEM | FOS.FOS_PATHMUSTEXIST | FOS.FOS_NOCHANGEDIR;
+            options |= pickFolders ? FOS.FOS_PICKFOLDERS : FOS.FOS_FILEMUSTEXIST;
             dialog.SetOptions(options);
 
             if (!string.IsNullOrEmpty(initialDirectory) && Directory.Exists(initialDirectory))

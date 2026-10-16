@@ -15,15 +15,48 @@ public static class Cue4Parse
 {
     private static DefaultFileProvider? Provider { get; set; }
 
+    private const string OodleDllName = "oodle-data-shared.dll";
+
     public static void Initialize()
     {
-        OodleHelper.DownloadOodleDll();
-        if (!File.Exists("oodle-data-shared.dll"))
+        // Oodle builds downloaded by CUE4Parse are x64 only; a 32-bit process cannot load them
+        if (!Environment.Is64BitProcess)
         {
-            throw new FileNotFoundException("Oodle DLL not found. Please ensure 'oodle-data-shared.dll' is present in the working directory.");
+            throw new PlatformNotSupportedException(
+                "Wolves is running as a 32-bit process, but the Oodle decompressor is 64-bit only. " +
+                "Build/publish for win-x64 (not win-x86).");
         }
 
-        OodleHelper.Initialize("oodle-data-shared.dll");
+        if (!Directory.Exists(Extras.Settings.PakPath))
+            throw new DirectoryNotFoundException($"Paks folder not found: '{Extras.Settings.PakPath}'.");
+
+        if (!File.Exists(Extras.Settings.MappingsPath))
+            throw new FileNotFoundException($"Mappings file not found: '{Extras.Settings.MappingsPath}'.", Extras.Settings.MappingsPath);
+
+        // CUE4Parse downloads the DLL into the working directory, which Program pins to the exe folder
+        string oodlePath = Path.Combine(AppContext.BaseDirectory, OodleDllName);
+        if (!File.Exists(oodlePath))
+        {
+            Console.WriteLine($"      Downloading {OodleDllName}...");
+            OodleHelper.DownloadOodleDll();
+        }
+
+        if (!File.Exists(oodlePath))
+        {
+            throw new FileNotFoundException(
+                $"'{OodleDllName}' is missing and could not be downloaded (no internet access, or GitHub is blocked). " +
+                $"Download it manually and place it next to Wolves.exe: '{oodlePath}'.", oodlePath);
+        }
+
+        try
+        {
+            OodleHelper.Initialize(oodlePath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load '{oodlePath}'. The file may be corrupted or built for another architecture; delete it to re-download.", ex);
+        }
+
         var versionContainer = new VersionContainer(EGame.GAME_DeadByDaylight);
         Provider = new DefaultFileProvider(
             Extras.Settings.PakPath,
@@ -36,6 +69,9 @@ public static class Cue4Parse
         };
 
         Provider.Initialize();
+        if (Provider.UnloadedVfs.Count + Provider.MountedVfs.Count == 0)
+            throw new InvalidOperationException($"No .pak/.utoc archives found in '{Extras.Settings.PakPath}'.");
+
         Provider.SubmitKey(new FGuid(0), new FAesKey(Extras.Settings.AesKey));
         Provider.PostMount();
 
@@ -43,9 +79,25 @@ public static class Cue4Parse
         var archiveMax = Provider.UnloadedVfs.Count + Provider.MountedVfs.Count;
         Console.WriteLine($"      Mounted {Provider.MountedVfs.Count}/{archiveMax} archives ({Provider.Keys.Count}/{aesMax} keys).");
 
+        if (Provider.MountedVfs.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Found {archiveMax} archives but none could be mounted. Check the warnings above: " +
+                "'Could not load file or assembly' means a DLL that CUE4Parse.dll needs is missing next to the exe; " +
+                "otherwise the AES key in Models.cs does not match this game build, or the build is not supported by CUE4Parse.dll.");
+        }
+
         Provider.LoadVirtualPaths(new FPackageFileVersion(522, (int)EUnrealEngineObjectUE5Version.ADD_SOFTOBJECTPATH_LIST));
         Provider.TryChangeCulture(Provider.GetLanguageCode(ELanguage.English));
-        Provider.MappingsContainer = new FileUsmapTypeMappingsProvider(Extras.Settings.MappingsPath);
+
+        try
+        {
+            Provider.MappingsContainer = new FileUsmapTypeMappingsProvider(Extras.Settings.MappingsPath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException($"Failed to read mappings '{Extras.Settings.MappingsPath}'. Make sure it is a valid .usmap for this game build.", ex);
+        }
     }
 
     public static void Get_Files()
