@@ -120,6 +120,5 @@ default customization items. In both files any id containing `Bundle` (case-inse
 ## Requirements
 
 * Windows (native file dialog, Oodle DLL).
-* .NET 10 SDK and a built `CUE4Parse.dll` at the `HintPath` configured in `Wolves.csproj`
-  (defaults to a sibling `CUE4Parse` checkout: `..\CUE4Parse\CUE4Parse\bin\Debug\net10.0\CUE4Parse.dll`).
+* .NET 10 SDK. A prebuilt `CUE4Parse.dll` ships in `libs\` (referenced via `HintPath` in `Wolves.csproj`).
 * A `.usmap` mappings file for the installed game build.
