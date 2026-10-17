@@ -51,6 +51,7 @@ All files are written to the `Extracted` folder.
 | `GetAll.json` | The same full inventory for every character at once |
 | `MarketFull.json` | Every cosmetic from the store catalog |
 | `MarketDLC.json` | Default cosmetics plus every character |
+| `CatalogUnlocked.json` | The store catalog with every item made available |
 | `ZLIB.py` | A small helper for packing and unpacking files ([see below](#zlibpy)) |
 
 ## Requirements
@@ -96,7 +97,7 @@ Publish with the `FolderProfile` profile (`win-x64`).
 2. Locates the game: command-line argument → saved path → Steam → Epic Games → folder picker.
 3. Mounts the game archives with CUE4Parse and reads `ItemDB`, `ItemAddonDB`, `OfferingDB`, `PerkDB` and `CharacterDescriptionDB`.
 4. Generates `Bloodweb.json`, `GetAll.json`, `ItemsList.json` and `CharactersList.json`.
-5. Generates `MarketFull.json` and `MarketDLC.json` from `Defaults\`.
+5. Generates `MarketFull.json`, `MarketDLC.json` and `CatalogUnlocked.json` from `Defaults\`.
 
 ### Project layout
 
@@ -120,6 +121,7 @@ Publish with the `FolderProfile` profile (`win-x64`).
 | `CatalogGenerator.cs` | Perk / item / add-on / offering quantities | `3` / `50` / `50` / `50` |
 | `CatalogGenerator.cs` | Bloodweb level, prestige | `30`, `0` |
 | `CatalogGenerator.cs` | `MarketProvider` (the `provider` field of the market files) | `Wolves (<version>)` |
+| `Program.cs` | `UnlockOptions` for `CatalogUnlocked.json`: replace dates, `unbreakable` mode (`Keep` / `Null` / `FalseCompact` / `FalseSpaced`; only `FalseSpaced` changes the file size, +1 byte per value), start and end dates | dates on, `Null`, `2018` / `2033` |
 
 > [!NOTE]
 > `Defaults\Catalog.decrypted.json` is a snapshot of the store catalog. Replace it with a newer one
