@@ -256,6 +256,270 @@ public static class CatalogGenerator
         Quantity = 1
     };
 
+    // ----------------------------------------------------------------------------- unlocked catalog
+
+    // metaData dates written by Catalog_Unlock() in the PHP API
+    public const string UnlockStartDate = "2018-01-01T00:00:00";   // newStartDate, releaseDate
+    public const string UnlockEndDate = "2033-01-01T00:00:00";     // newEndDate
+
+    private const int IsoDateLength = 19;   // yyyy-MM-ddTHH:mm:ss
+    private const string UnbreakableKey = "unbreakable";
+    private static readonly byte[] LiteralTrue = "true"u8.ToArray();
+    private static readonly byte[] LiteralNull = "null"u8.ToArray();
+    private static readonly byte[] LiteralFalse = "false"u8.ToArray();
+
+    /// <summary>What happens to <c>"unbreakable": true</c> in <c>metaData</c>.</summary>
+    public enum UnbreakableMode
+    {
+        /// <summary>Leave as is.</summary>
+        Keep,
+
+        /// <summary><c>true</c> -> <c>null</c> (same 4 bytes).</summary>
+        Null,
+
+        /// <summary><c>"unbreakable": true</c> -> <c>"unbreakable":false</c>; the extra byte is taken from the space after the colon, so the size is preserved.</summary>
+        FalseCompact,
+
+        /// <summary><c>"unbreakable": true</c> -> <c>"unbreakable": false</c>; formatting kept, but the file grows by 1 byte per value.</summary>
+        FalseSpaced
+    }
+
+    /// <param name="ReplaceDates">Move <c>newStartDate</c> / <c>releaseDate</c> to <paramref name="StartDate"/> and <c>newEndDate</c> to <paramref name="EndDate"/>.</param>
+    /// <param name="Unbreakable">How to rewrite <c>"unbreakable": true</c>.</param>
+    /// <param name="StartDate">Must be exactly <c>yyyy-MM-ddTHH:mm:ss</c> so the size does not change.</param>
+    /// <param name="EndDate">Must be exactly <c>yyyy-MM-ddTHH:mm:ss</c> so the size does not change.</param>
+    public sealed record UnlockOptions(
+        bool ReplaceDates = true,
+        UnbreakableMode Unbreakable = UnbreakableMode.Null,
+        string StartDate = UnlockStartDate,
+        string EndDate = UnlockEndDate);
+
+    /// <param name="SizeDelta">Output size minus input size; 0 unless <see cref="UnbreakableMode.FalseSpaced"/> is used.</param>
+    public sealed record UnlockResult(int DatesReplaced, int DatesSkipped, int UnbreakableReplaced, int UnbreakableSkipped, long Size, long SizeDelta);
+
+    /// <summary>
+    /// <c>CatalogUnlocked.json</c>: the decrypted catalog with the <c>metaData</c> dates moved so every item
+    /// counts as released and not expired (same as <c>Catalog_Unlock()</c> in the PHP API), and
+    /// <c>"unbreakable": true</c> rewritten; each step can be switched off through <paramref name="options"/>.
+    /// The file is patched byte by byte instead of being re-serialised, so the output keeps the same
+    /// formatting and, unless <see cref="UnbreakableMode.FalseSpaced"/> is chosen, the exact same size.
+    /// </summary>
+    public static UnlockResult WriteUnlockedCatalog(string path, string decryptedCatalogPath, UnlockOptions? options = null)
+    {
+        options ??= new UnlockOptions();
+        byte[] startDate = ToIsoDateBytes(options.StartDate, nameof(options.StartDate));
+        byte[] endDate = ToIsoDateBytes(options.EndDate, nameof(options.EndDate));
+
+        byte[] data = File.ReadAllBytes(decryptedCatalogPath);
+        long originalSize = data.Length;
+
+        var growPositions = new List<int>();
+        var result = UnlockInPlace(data, options, startDate, endDate, growPositions);
+        byte[] output = growPositions.Count > 0 ? InsertFalseLiterals(data, growPositions) : data;
+
+        // Only FalseSpaced may change the size, and only by exactly 1 byte per value
+        long expectedSize = originalSize + growPositions.Count;
+        if (output.Length != expectedSize)
+            throw new InvalidOperationException($"Unlocked catalog size is {output.Length}, expected {expectedSize}; refusing to write it.");
+
+        File.WriteAllBytes(path, output);
+        return result with { Size = output.Length, SizeDelta = output.Length - originalSize };
+    }
+
+    /// <summary>Copies <paramref name="data"/>, writing "false" in place of the 4-byte "true" at each position.</summary>
+    private static byte[] InsertFalseLiterals(byte[] data, List<int> truePositions)
+    {
+        var output = new byte[data.Length + truePositions.Count];
+        int source = 0, target = 0;
+
+        foreach (int position in truePositions)
+        {
+            int length = position - source;
+            Buffer.BlockCopy(data, source, output, target, length);
+            target += length;
+
+            LiteralFalse.CopyTo(output, target);
+            target += LiteralFalse.Length;
+            source = position + LiteralTrue.Length;
+        }
+
+        Buffer.BlockCopy(data, source, output, target, data.Length - source);
+        return output;
+    }
+
+    private static byte[] ToIsoDateBytes(string date, string name)
+    {
+        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(date);
+        if (bytes.Length != IsoDateLength || !IsIsoDate(bytes, 0, bytes.Length))
+            throw new ArgumentException($"{name} must be exactly yyyy-MM-ddTHH:mm:ss (got '{date}').", name);
+        return bytes;
+    }
+
+    private sealed class JsonFrame
+    {
+        public bool IsObject;
+        public bool ExpectKey;
+        public string? Key;
+    }
+
+    /// <summary>
+    /// Minimal JSON scanner over raw UTF-8 bytes (structural characters are ASCII, so multi-byte
+    /// text can never be mistaken for them). Rewrites date strings at <c>[i].metaData.&lt;key&gt;</c>
+    /// and <c>[i].metaData.unbreakable: true</c>. Every change keeps the same byte length.
+    /// Values that are not "yyyy-MM-ddTHH:mm:ss..." strings (null, empty, other formats) are left alone.
+    /// </summary>
+    /// <param name="growPositions">Receives the positions of "true" literals that FalseSpaced must widen (not patched in place).</param>
+    private static UnlockResult UnlockInPlace(byte[] json, UnlockOptions options, byte[] startDate, byte[] endDate, List<int> growPositions)
+    {
+        var dates = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["newStartDate"] = startDate,
+            ["releaseDate"] = startDate,
+            ["newEndDate"] = endDate
+        };
+
+        var frames = new List<JsonFrame>();
+        int datesReplaced = 0, datesSkipped = 0, unbreakableReplaced = 0, unbreakableSkipped = 0;
+        int i = 0;
+
+        while (i < json.Length)
+        {
+            switch (json[i])
+            {
+                case (byte)'"':
+                {
+                    int end = FindStringEnd(json, i);
+                    JsonFrame? top = frames.Count > 0 ? frames[^1] : null;
+
+                    if (top is { IsObject: true, ExpectKey: true })
+                    {
+                        top.Key = System.Text.Encoding.UTF8.GetString(json, i + 1, end - i - 1);
+                        top.ExpectKey = false;
+                    }
+                    else if (options.ReplaceDates && IsCatalogMetaData(frames) && top!.Key is { } key &&
+                             dates.TryGetValue(key, out byte[]? date))
+                    {
+                        if (IsIsoDate(json, i + 1, end))
+                        {
+                            Buffer.BlockCopy(date, 0, json, i + 1, IsoDateLength);   // same length: size is preserved
+                            datesReplaced++;
+                        }
+                        else
+                        {
+                            datesSkipped++;
+                        }
+                    }
+
+                    i = end + 1;
+                    continue;
+                }
+
+                // Literals are never inside strings here: strings are skipped as a whole above
+                case (byte)'t':
+                    if (options.Unbreakable != UnbreakableMode.Keep && IsCatalogMetaData(frames) &&
+                        frames[^1] is { ExpectKey: false, Key: UnbreakableKey } &&
+                        json.AsSpan(i).StartsWith(LiteralTrue))
+                    {
+                        if (options.Unbreakable == UnbreakableMode.Null)
+                        {
+                            LiteralNull.CopyTo(json, i);
+                            unbreakableReplaced++;
+                        }
+                        else if (options.Unbreakable == UnbreakableMode.FalseSpaced)
+                        {
+                            growPositions.Add(i);   // widened when the output is built
+                            unbreakableReplaced++;
+                        }
+                        else if (i > 0 && (json[i - 1] == (byte)' ' || json[i - 1] == (byte)'\t'))
+                        {
+                            // "key": true -> "key":false (5 bytes into the 4 + 1 whitespace byte)
+                            LiteralFalse.CopyTo(json, i - 1);
+                            unbreakableReplaced++;
+                        }
+                        else
+                        {
+                            unbreakableSkipped++;   // no spare byte: changing it would change the size
+                        }
+
+                        i += LiteralTrue.Length;
+                        continue;
+                    }
+                    break;
+
+                case (byte)'{':
+                    frames.Add(new JsonFrame { IsObject = true, ExpectKey = true });
+                    break;
+
+                case (byte)'[':
+                    frames.Add(new JsonFrame { IsObject = false });
+                    break;
+
+                case (byte)'}':
+                case (byte)']':
+                    if (frames.Count == 0)
+                        throw new InvalidDataException("Malformed catalog JSON: unbalanced brackets.");
+                    frames.RemoveAt(frames.Count - 1);
+                    break;
+
+                case (byte)',':
+                    if (frames.Count > 0 && frames[^1].IsObject)
+                        frames[^1].ExpectKey = true;
+                    break;
+            }
+
+            i++;
+        }
+
+        return new UnlockResult(datesReplaced, datesSkipped, unbreakableReplaced, unbreakableSkipped, json.Length, 0);
+    }
+
+    // Root array -> catalog entry object -> "metaData" object
+    private static bool IsCatalogMetaData(List<JsonFrame> frames) =>
+        frames.Count == 3 &&
+        !frames[0].IsObject &&
+        frames[1].IsObject && frames[1].Key == "metaData" &&
+        frames[2].IsObject;
+
+    /// <summary>Index of the closing quote of the string that opens at <paramref name="start"/>.</summary>
+    private static int FindStringEnd(byte[] json, int start)
+    {
+        int i = start + 1;
+        while (i < json.Length)
+        {
+            if (json[i] == (byte)'\\')
+                i += 2;
+            else if (json[i] == (byte)'"')
+                return i;
+            else
+                i++;
+        }
+
+        throw new InvalidDataException("Malformed catalog JSON: unterminated string.");
+    }
+
+    private static bool IsIsoDate(byte[] json, int start, int end)
+    {
+        if (end - start < IsoDateLength)
+            return false;
+
+        for (int k = 0; k < IsoDateLength; k++)
+        {
+            byte c = json[start + k];
+            bool ok = k switch
+            {
+                4 or 7 => c == (byte)'-',
+                10 => c == (byte)'T',
+                13 or 16 => c == (byte)':',
+                _ => c >= (byte)'0' && c <= (byte)'9'
+            };
+
+            if (!ok)
+                return false;
+        }
+
+        return true;
+    }
+
     // ----------------------------------------------------------------------------- serialisation
 
     public static string ToJson(object value) => JsonConvert.SerializeObject(value, SerializerSettings);
