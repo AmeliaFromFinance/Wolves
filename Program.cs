@@ -116,7 +116,7 @@ internal class Program
         Console.WriteLine($"      CharactersList.json: {CatalogGenerator.CharacterIdsInOrder().Count} characters");
 
         // Step 5: Generate the market files from the default customization items + bundled decrypted catalog
-        Console.WriteLine("[5/5] Generating MarketFull.json and MarketDLC.json...");
+        Console.WriteLine("[5/5] Generating MarketFull.json, MarketDLC.json and CatalogUnlocked.json...");
         var defaultCustomizationIds = CatalogGenerator.LoadDefaultCustomizationItems(DefaultCustomizationItemsPath);
         if (defaultCustomizationIds.Count == 0)
             Console.WriteLine($"      [WARN] No default customization items found at '{DefaultCustomizationItemsPath}'.");
@@ -128,9 +128,16 @@ internal class Program
 
         await CatalogGenerator.WriteMarketFullAsync(Path.Combine(FinalOutputFolder, "MarketFull.json"), defaultCustomizationIds, catalogIds);
         await CatalogGenerator.WriteMarketDlcAsync(Path.Combine(FinalOutputFolder, "MarketDLC.json"), defaultCustomizationIds);
+        var unlockOptions = new CatalogGenerator.UnlockOptions(
+            ReplaceDates: true,
+            Unbreakable: CatalogGenerator.UnbreakableMode.FalseCompact);
+        var unlock = CatalogGenerator.WriteUnlockedCatalog(Path.Combine(FinalOutputFolder, "CatalogUnlocked.json"), DecryptedCatalogPath, unlockOptions);
 
         Console.WriteLine($"      MarketFull.json: {defaultCustomizationIds.Count} defaults + {catalogIds.Count} catalog entries (characters and bundles excluded)");
         Console.WriteLine($"      MarketDLC.json:  {defaultCustomizationIds.Count} defaults + {CatalogGenerator.CharacterIdsInOrder().Count} characters (bundles excluded)");
+        Console.WriteLine($"      CatalogUnlocked.json: {unlock.DatesReplaced} dates replaced ({unlock.DatesSkipped} skipped), " +
+                          $"{unlock.UnbreakableReplaced} unbreakable -> {unlockOptions.Unbreakable} ({unlock.UnbreakableSkipped} skipped), " +
+                          (unlock.SizeDelta == 0 ? $"size unchanged ({unlock.Size:N0} bytes)" : $"size {unlock.Size:N0} bytes ({unlock.SizeDelta:+#;-#} bytes)"));
         Console.WriteLine($"      Saved to: {FinalOutputFolder}");
 
         return 0;
